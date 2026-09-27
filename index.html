@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Juno Forklift Logger</title><style>body{font-family:-apple-system;background:#111;color:white;padding:18px}button{font-size:18px;padding:14px;margin:5px;border-radius:12px;border:0}.c{background:#222;padding:14px;border-radius:12px;margin:12px 0}</style>
+<h2>🚜 Juno Forklift Logger v1</h2><div class=c><b id=s>待機中</b><p id=n>SET 0 / Motion 0 / GPS 0</p></div>
+<button onclick=start()>▶ 記録開始</button><button onclick=gps('MANUAL')>📍 GPS補正</button><button onclick=stop()>■ 終了・CSV保存</button>
+<p>開始時＋5分ごとにGPS取得。加速度・ジャイロ・姿勢・コンパスを約10Hzで記録します。記録中は画面を消さず、iPhoneをリフトに固定してください。</p>
+<script>
+let R=[],run=false,set=0,mn=0,gn=0,last=0,timer=null,o={a:'',b:'',g:'',h:''};
+const T=100,G=300000,now=()=>new Date().toISOString(),v=x=>x==null?'':x;
+function ui(){n.textContent=`SET ${set} / Motion ${mn} / GPS ${gn}`}
+function add(type,d={}){R.push({time:now(),set,type,lat:v(d.lat),lon:v(d.lon),acc:v(d.acc),ax:v(d.ax),ay:v(d.ay),az:v(d.az),gx:v(d.gx),gy:v(d.gy),gz:v(d.gz),ra:v(d.ra),rb:v(d.rb),rg:v(d.rg),oa:v(o.a),ob:v(o.b),og:v(o.g),heading:v(o.h)})}
+async function perm(){if(DeviceMotionEvent.requestPermission&&await DeviceMotionEvent.requestPermission()!='granted')throw Error('モーション許可が必要');if(DeviceOrientationEvent.requestPermission&&await DeviceOrientationEvent.requestPermission()!='granted')throw Error('方向センサー許可が必要')}
+function gps(reason){if(!run&&reason!='START')return;navigator.geolocation.getCurrentPosition(p=>{set++;gn++;add('GPS_'+reason,{lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy});ui()},e=>add('GPS_ERROR',{acc:e.message}),{enableHighAccuracy:true,maximumAge:0,timeout:20000})}
+function ori(e){o={a:e.alpha,b:e.beta,g:e.gamma,h:typeof e.webkitCompassHeading=='number'?e.webkitCompassHeading:e.alpha}}
+function mot(e){if(!run)return;let x=performance.now();if(x-last<T)return;last=x;let a=e.acceleration||{},g=e.accelerationIncludingGravity||{},r=e.rotationRate||{};add('MOTION',{ax:a.x,ay:a.y,az:a.z,gx:g.x,gy:g.y,gz:g.z,ra:r.alpha,rb:r.beta,rg:r.gamma});mn++;if(mn%10==0)ui()}
+async function start(){if(run)return;try{await perm();R=[];set=mn=gn=0;run=true;addEventListener('devicemotion',mot);addEventListener('deviceorientation',ori);s.textContent='● 記録中';gps('START');timer=setInterval(()=>gps('AUTO5MIN'),G);ui()}catch(e){alert(e.message)}}
+function stop(){if(!run)return;run=false;clearInterval(timer);removeEventListener('devicemotion',mot);removeEventListener('deviceorientation',ori);add('STOP');s.textContent='■ 終了';let C=['time','set','type','lat','lon','acc','ax','ay','az','gx','gy','gz','ra','rb','rg','oa','ob','og','heading'],q=x=>'"'+String(x??'').replaceAll('"','""')+'"',csv='\ufeff'+[C.join(','),...R.map(r=>C.map(c=>q(r[c])).join(','))].join('\n'),b=new Blob([csv],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='Juno_Forklift_'+Date.now()+'.csv';a.click()}
+</script>
